@@ -1,0 +1,42 @@
+name: Generate public-repos.json
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 2 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch public repos
+        env:
+          TARGET_USERNAME: Moekyawaung
+        run: |
+          set -euo pipefail
+          mkdir -p public/data
+          curl -sS "https://api.github.com/users/${TARGET_USERNAME}/repos?sort=updated&per_page=100" \
+            | jq '[ .[] | select(.fork == false) | {id, name, html_url, description, language, stargazers_count, updated_at, fork} ] \
+                | sort_by(.updated_at) | reverse' \
+            > public/data/public-repos.json
+
+      - name: Commit generated JSON
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/data/public-repos.json
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "chore: update public repos json"
+          git push
